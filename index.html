@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FesuraNet</title>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+    <script src="https://widget.cloudinary.com/v2.0/global/all.js"></script>
+    <style>
+        :root { --p:#ff004f; --s:#6a0dad; --acc:#0084ff; }
+        * { box-sizing:border-box; margin:0; padding:0; }
+        body { font-family:system-ui,sans-serif; background:url('https://images.unsplash.com/photo-1507525428034-b723cf961d3e') center/cover fixed; color:#eee; line-height:1.6; }
+        body.dark { background:#0a0a0a; }
+        #sidebar { position:fixed; top:0; left:0; width:260px; height:100vh; background:#111; padding:20px; z-index:1000; transition:0.3s; overflow-y:auto; }
+        #sidebar button { width:100%; padding:16px; margin:10px 0; background:#333; color:white; border:none; border-radius:12px; cursor:pointer; text-align:left; font-size:17px; font-weight:600; }
+        #sidebar button:hover { background:var(--acc); }
+        #hamburger, #closeSidebar { display:none; position:fixed; top:15px; left:15px; z-index:1100; background:#222; color:white; padding:12px 16px; border-radius:50%; cursor:pointer; font-size:22px; }
+        #closeSidebar { right:15px; left:auto; }
+        #header { position:fixed; top:0; left:260px; right:0; height:70px; background:rgba(17,17,17,0.95); backdrop-filter:blur(12px); display:flex; justify-content:space-between; align-items:center; padding:0 30px; z-index:900; }
+        #logo { font-size:32px; font-weight:bold; background:linear-gradient(45deg,var(--p),var(--s)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+        #main { margin-left:260px; padding:90px 30px 40px; min-height:100vh; }
+        .post { background:#222; padding:24px; border-radius:20px; margin-bottom:28px; box-shadow:0 8px 25px rgba(0,0,0,0.5); }
+        textarea, input[type=text], input[type=password] { width:100%; padding:14px; background:#333; border:1px solid #444; border-radius:12px; color:white; margin:10px 0; font-size:16px; }
+        button { background:var(--acc); color:white; border:none; padding:12px 28px; border-radius:30px; cursor:pointer; font-weight:bold; transition:0.3s; }
+        button:hover { background:var(--p); transform:scale(1.05); }
+        button.danger { background:#ff0040; }
+        .post-header { display:flex; align-items:center; gap:14px; margin-bottom:14px; }
+        .post-avatar { width:52px; height:52px; border-radius:50%; border:4px solid var(--p); object-fit:cover; }
+        .media { max-width:100%; border-radius:16px; margin:14px 0; display:block; }
+        .like-btn { background:none; color:#ccc; font-size:28px; padding:8px 16px; border:none; cursor:pointer; }
+        .like-btn.liked { color:#ff004f; }
+        .comment { background:#2a2a2a; padding:14px; border-radius:14px; margin:10px 0; }
+        .comment-header { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+        .comment-avatar { width:32px; height:32px; border-radius:50%; }
+        .chat-window { height:65vh; overflow-y:auto; padding:20px; background:#111; border-radius:15px; margin-bottom:10px; }
+        .msg { max-width:80%; padding:12px 18px; border-radius:18px; margin:8px 0; }
+        .msg.sent { background:var(--p); align-self:flex-end; }
+        .msg.received { background:#333; align-self:flex-start; }
+        .msg-list { display:flex; flex-direction:column; }
+        #loginPopup { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:linear-gradient(135deg,var(--s),var(--p)); padding:50px; border-radius:28px; width:90%; max-width:420px; text-align:center; z-index:2000; color:white; box-shadow:0 30px 60px rgba(0,0,0,0.8); }
+        .tab { display:none; }
+        .tab.active { display:block; }
+        @media (max-width:768px) {
+            #sidebar { transform:translateX(-100%); }
+            #sidebar.active { transform:translateX(0); }
+            #hamburger,#closeSidebar { display:block; }
+            #main,#header { margin-left:0; left:0; }
+        }
+    </style>
+</head>
+<body>
+    <button id="hamburger">Menu</button>
+    <button id="closeSidebar">X</button>
+
+    <div id="sidebar">
+        <button onclick="showTab('home')">Home</button>
+        <button onclick="showTab('messages')">Messages</button>
+        <button onclick="showTab('friends')">Friends</button>
+        <button onclick="showTab('profile')">Profile</button>
+        <button onclick="showTab('settings')">Settings</button>
+    </div>
+
+    <div id="header">
+        <div id="logo">FesuraNet</div>
+        <div style="display:flex; align-items:center; gap:15px;">
+            <span id="currentUserName"></span>
+            <img id="currentUserAvatar" src="" width="48" alt="Avatar">
+            <button onclick="auth.signOut()" class="danger">Logout</button>
+        </div>
+    </div>
+
+    <div id="main">
+        <!-- Home -->
+        <div id="home" class="tab active">
+            <div class="post">
+                <textarea id="postText" placeholder="What's on your mind?" maxlength="280"></textarea>
+                <div style="display:flex; gap:12px; margin-top:12px;">
+                    <button onclick="createPost(false)">Post Text Only</button>
+                    <button onclick="createPost(true)" style="background:#00aa00;">Add Photo/Video</button>
+                </div>
+            </div>
+            <div id="posts"></div>
+        </div>
+
+        <!-- Messages -->
+        <div id="messages" class="tab">
+            <h2>Messages</h2>
+            <select id="chatSelect" onchange="openChat(this.value)" style="width:100%; padding:14px; background:#333; color:white; border-radius:12px; margin-bottom:15px;">
+                <option>Select a friend</option>
+            </select>
+            <div id="chatWindow" class="chat-window"></div>
+            <div style="display:flex; gap:10px;">
+                <input type="text" id="msgInput" placeholder="Type a message..." onkeypress="if(event.key==='Enter') sendMessage()">
+                <button onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+
+        <!-- Friends -->
+        <div id="friends" class="tab">
+            <h2>Friends</h2>
+            <div style="display:flex; gap:10px; margin-bottom:20px;">
+                <input type="text" id="friendSearch" placeholder="Search by email...">
+                <button onclick="searchUsers()">Search</button>
+            </div>
+            <div id="searchResults"></div>
+            <h3 style="margin-top:30px;">Pending Requests</h3>
+            <div id="friendRequests"></div>
+            <h3 style="margin-top:30px;">Your Friends</h3>
+            <div id="friendsList"></div>
+        </div>
+
+        <!-- Profile -->
+        <div id="profile" class="tab">
+            <h2>Your Profile</h2>
+            <div id="profileInfo" style="text-align:center; padding:40px;"></div>
+        </div>
+
+        <!-- Settings -->
+        <div id="settings" class="tab">
+            <h2>Settings</h2>
+            <label><input type="checkbox" id="darkModeToggle"> Dark Mode</label>
+        </div>
+    </div>
+
+    <div id="loginPopup">
+        <h2 id="authTitle">Login</h2>
+        <div id="authError" style="display:none;background:rgba(255,0,0,0.3);padding:14px;border-radius:12px;margin:15px 0;"></div>
+        <input type="text" id="emailInput" placeholder="Email">
+        <input type="password" id="passwordInput" placeholder="Password">
+        <button id="authButton">Login</button>
+        <button id="switchAuthButton" style="background:#333; margin-top:10px;">Sign Up</button>
+    </div>
+
+    <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, updateProfile } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+    import { getFirestore, doc, setDoc, getDoc, getDocs, collection, query, where, orderBy, limit, addDoc, updateDoc, arrayUnion, arrayRemove, serverTimestamp, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+    const app = initializeApp({
+        apiKey: "AIzaSyAFltBiLJtrGdH0kD2Ul_ge28Hd6FHZ_CI",
+        authDomain: "fesuranet.firebaseapp.com",
+        projectId: "fesuranet",
+        storageBucket: "fesuranet.firebasestorage.app",
+        messagingSenderId: "17641984666",
+        appId: "1:17641984666:web:7ba8d56f7bd1a5d50f8523"
+    });
+
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    let currentUser = null;
+    let currentChatId = null;
+
+    // ←←← CHANGE THIS TO YOUR CLOUDINARY CLOUD NAME ←←←
+    const CLOUDINARY_CLOUD_NAME = "dtndfzdw1";
+    const CLOUDINARY_PRESET = "fesuranet";
+
+    // === POSTING + COMMENTS ===
+    window.createPost = async (withMedia = false) => {
+        if (!currentUser) return alert("Login first!");
+
+        let mediaUrl = "", mediaType = "";
+        if (withMedia) {
+            const result = await new Promise(resolve => {
+                cloudinary.openUploadWidget({
+                    cloudName: CLOUDINARY_CLOUD_NAME,
+                    uploadPreset: CLOUDINARY_PRESET,
+                    sources: ['local', 'camera', 'url'],
+                    multiple: false
+                }, (error, result) => {
+                    if (result && result.event === "success") resolve(result.info);
+                });
+            });
+            if (!result) return;
+            mediaUrl = result.secure_url;
+            mediaType = result.resource_type === "video" ? "video" : "image";
+        }
+
+        const text = DOMPurify.sanitize(document.getElementById('postText').value.trim());
+        if (!text && !mediaUrl) return alert("Add text or media!");
+
+        await addDoc(collection(db, 'posts'), {
+            userId: currentUser.uid,
+            displayName: currentUser.displayName || currentUser.email.split('@')[0],
+            text,
+            mediaUrl,
+            mediaType,
+            likes: 0,
+            comments: [],
+            createdAt: serverTimestamp()
+        });
+
+        document.getElementById('postText').value = '';
+        renderPosts();
+    };
+
+    window.addComment = async (postId) => {
+        const input = document.getElementById(`comment-${postId}`);
+        const text = DOMPurify.sanitize(input.value.trim());
+        if (!text) return;
+        await updateDoc(doc(db, 'posts', postId), {
+            comments: arrayUnion({
+                userId: currentUser.uid,
+                displayName: currentUser.displayName || currentUser.email.split('@')[0],
+                text,
+                createdAt: serverTimestamp()
+            })
+        });
+        input.value = '';
+        renderPosts();
+    };
+
+    const renderPosts = async () => {
+        const container = document.getElementById('posts');
+        container.innerHTML = '<p style="text-align:center;padding:60px;color:#aaa;">Loading feed...</p>';
+        const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'), limit(30));
+        const snapshot = await getDocs(q);
+        container.innerHTML = '';
+
+        for (const d of snapshot.docs) {
+            const p = d.data();
+            const el = document.createElement('div');
+            el.className = 'post';
+            el.innerHTML = `
+                <div class="post-header">
+                    <img src="https://robohash.org/${p.userId}?size=100x100" class="post-avatar">
+                    <strong style="font-size:18px;">${DOMPurify.sanitize(p.displayName)}</strong>
+                </div>
+                ${p.text ? `<p style="margin:15px 0;font-size:17px;white-space:pre-wrap;">${DOMPurify.sanitize(p.text.replace(/\n/g, '<br>'))}</p>` : ''}
+                ${p.mediaUrl ? (p.mediaType === 'video' 
+                    ? `<video controls class="media"><source src="${p.mediaUrl}"></video>`
+                    : `<img src="${p.mediaUrl}" class="media">`) : ''}
+                <div style="margin-top:15px;">
+                    <button class="like-btn ${p.likes > 0 ? 'liked' : ''}" onclick="likePost('${d.id}', ${p.likes||0})">
+                        Heart ${p.likes||0}
+                    </button>
+                </div>
+                <div style="margin-top:20px;">
+                    ${p.comments?.map(c => `
+                        <div class="comment">
+                            <div class="comment-header">
+                                <img src="https://robohash.org/${c.userId}?size=64x64" class="comment-avatar">
+                                <strong>${DOMPurify.sanitize(c.displayName)}</strong>
+                            </div>
+                            <p style="margin-top:6px;">${DOMPurify.sanitize(c.text)}</p>
+                        </div>
+                    `).join('') || ''}
+                    <textarea id="comment-${d.id}" placeholder="Write a comment..." style="height:60px;"></textarea>
+                    <button onclick="addComment('${d.id}')" style="margin-top:8px;">Comment</button>
+                </div>
+            `;
+            container.appendChild(el);
+        }
+    };
+
+    window.likePost = async (id, n) => {
+        await updateDoc(doc(db, 'posts', id), { likes: n + 1 });
+        renderPosts();
+    };
+
+    // === DIRECT MESSAGES (REAL-TIME) ===
+    const loadChatList = async () => {
+        const select = document.getElementById('chatSelect');
+        select.innerHTML = '<option>Select a friend</option>';
+        const snap = await getDoc(doc(db, 'users', currentUser.uid));
+        const friends = snap.data()?.friends || [];
+        for (const uid of friends) {
+            const userSnap = await getDoc(doc(db, 'users', uid));
+            const user = userSnap.data();
+            const opt = document.createElement('option');
+            opt.value = uid;
+            opt.textContent = user.displayName || user.email;
+            select.appendChild(opt);
+        }
+    };
+
+    window.openChat = (friendId) => {
+        if (!friendId) return;
+        currentChatId = [currentUser.uid, friendId].sort().join('_');
+        const chatWindow = document.getElementById('chatWindow');
+        chatWindow.innerHTML = '';
+        const q = query(collection(db, 'chats', currentChatId, 'messages'), orderBy('createdAt'));
+        onSnapshot(q, snap => {
+            chatWindow.innerHTML = '';
+            snap.forEach(doc => {
+                const m = doc.data();
+                const div = document.createElement('div');
+                div.className = `msg ${m.sender === currentUser.uid ? 'sent' : 'received'}`;
+                div.textContent = m.text;
+                chatWindow.appendChild(div);
+            });
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        });
+    };
+
+    window.sendMessage = async () => {
+        const input = document.getElementById('msgInput');
+        const text = input.value.trim();
+        if (!text || !currentChatId) return;
+        await addDoc(collection(db, 'chats', currentChatId, 'messages'), {
+            sender: currentUser.uid,
+            text,
+            createdAt: serverTimestamp()
+        });
+        input.value = '';
+    };
+
+    // === FRIENDS SYSTEM ===
+    window.searchUsers = async () => {
+        const email = document.getElementById('friendSearch').value.trim();
+        if (!email) return;
+        const q = query(collection(db, 'users'), where('email', '==', email));
+        const snap = await getDocs(q);
+        const results = document.getElementById('searchResults');
+        results.innerHTML = '';
+        if (snap.empty) { results.innerHTML = '<p>User not found</p>'; return; }
+        snap.forEach(d => {
+            const user = d.data();
+            if (d.id === currentUser.uid) { results.innerHTML = '<p>That\'s you!</p>'; return; }
+            const div = document.createElement('div');
+            div.style = 'background:#333;padding:18px;margin:15px 0;border-radius:15px;display:flex;justify-content:space-between;align-items:center;';
+            div.innerHTML = `
+                <div><strong>${DOMPurify.sanitize(user.displayName || user.email)}</strong></div>
+                <button onclick="sendFriendRequest('${d.id}')" style="background:var(--p);">Add Friend</button>
+            `;
+            results.appendChild(div);
+        });
+    };
+
+    window.sendFriendRequest = async (uid) => {
+        await updateDoc(doc(db, 'users', uid), { friendRequests: arrayUnion(currentUser.uid) });
+        alert("Friend request sent!");
+    };
+
+    const renderFriendRequests = async () => {
+        const snap = await getDoc(doc(db, 'users', currentUser.uid));
+        const requests = snap.data()?.friendRequests || [];
+        const container = document.getElementById('friendRequests');
+        container.innerHTML = requests.length === 0 ? '<p>No pending requests</p>' : '';
+        for (const uid of requests) {
+            const userSnap = await getDoc(doc(db, 'users', uid));
+            const user = userSnap.data();
+            const div = document.createElement('div');
+            div.style = 'background:#333;padding:18px;margin:12px 0;border-radius:15px;display:flex;justify-content:space-between;align-items:center;';
+            div.innerHTML = `
+                <strong>${DOMPurify.sanitize(user.displayName || user.email)}</strong>
+                <div>
+                    <button onclick="acceptFriend('${uid}')" style="background:#00aa00;margin:5px;">Accept</button>
+                    <button onclick="declineFriend('${uid}')" style="background:#ff4444;margin:5px;">Decline</button>
+                </div>
+            `;
+            container.appendChild(div);
+        }
+    };
+
+    window.acceptFriend = async (uid) => {
+        await updateDoc(doc(db, 'users', currentUser.uid), { friends: arrayUnion(uid), friendRequests: arrayRemove(uid) });
+        await updateDoc(doc(db, 'users', uid), { friends: arrayUnion(currentUser.uid) });
+        renderFriendRequests();
+        renderFriendsList();
+        loadChatList();
+    };
+
+    window.declineFriend = async (uid) => {
+        await updateDoc(doc(db, 'users', currentUser.uid), { friendRequests: arrayRemove(uid) });
+        renderFriendRequests();
+    };
+
+    const renderFriendsList = async () => {
+        const snap = await getDoc(doc(db, 'users', currentUser.uid));
+        const friends = snap.data()?.friends || [];
+        const container = document.getElementById('friendsList');
+        container.innerHTML = friends.length === 0 ? '<p>No friends yet</p>' : '';
+        for (const uid of friends) {
+            const userSnap = await getDoc(doc(db, 'users', uid));
+            const user = userSnap.data();
+            const div = document.createElement('div');
+            div.style = 'background:#333;padding:18px;margin:12px 0;border-radius:15px;display:flex;align-items:center;gap:15px;';
+            div.innerHTML = `
+                <img src="https://robohash.org/${uid}?size=80x80" style="border-radius:50%;">
+                <strong>${DOMPurify.sanitize(user.displayName || user.email)}</strong>
+            `;
+            container.appendChild(div);
+        }
+    };
+
+    // === AUTH & UI ===
+    window.showTab = id => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        if (id === 'home') renderPosts();
+        if (id === 'friends') { renderFriendRequests(); renderFriendsList(); }
+        if (id === 'messages') loadChatList();
+    };
+
+    onAuthStateChanged(auth, async user => {
+        currentUser = user;
+        if (user) {
+            document.getElementById('loginPopup').style.display = 'none';
+            document.getElementById('currentUserName').textContent = user.displayName || user.email.split('@')[0];
+            document.getElementById('currentUserAvatar').src = `https://robohash.org/${user.uid}?size=100x100`;
+            await setDoc(doc(db, 'users', user.uid), { online: true }, { merge: true });
+            showTab('home');
+        } else {
+            document.getElementById('loginPopup').style.display = 'block';
+        }
+    });
+
+    document.getElementById('authButton').onclick = () => {
+        const email = document.getElementById('emailInput').value.trim();
+        const pass = document.getElementById('passwordInput').value;
+        signInWithEmailAndPassword(auth, email, pass).catch(e => alert(e.message));
+    };
+
+    document.getElementById('switchAuthButton').onclick = () => {
+        const email = document.getElementById('emailInput').value.trim();
+        const pass = document.getElementById('passwordInput').value;
+        const username = prompt("Choose your username:");
+        if (!username || pass.length < 6) return alert("Invalid input");
+        createUserWithEmailAndPassword(auth, email, pass)
+            .then(cred => {
+                updateProfile(cred.user, { displayName: username });
+                setDoc(doc(db, 'users', cred.user.uid), { 
+                    displayName: username, email, friends: [], friendRequests: [], online: true 
+                });
+            })
+            .catch(e => alert(e.message));
+    };
+
+    document.getElementById('darkModeToggle')?.addEventListener('change', e => {
+        document.body.classList.toggle('dark', e.target.checked);
+        localStorage.setItem('fesuranet_dark', e.target.checked);
+    });
+    if (localStorage.getItem('fesuranet_dark') === 'true') {
+        document.body.classList.add('dark');
+        document.getElementById('darkModeToggle').checked = true;
+    }
+
+    document.getElementById('hamburger').onclick = () => document.getElementById('sidebar').classList.add('active');
+    document.getElementById('closeSidebar').onclick = () => document.getElementById('sidebar').classList.remove('active');
+    </script>
+</body>
+</html>
